@@ -2699,9 +2699,10 @@ group by format(start_date, 'MM-yyyy')
 select plan_name, count(customer_id) as total_customer
 from plans p
 join subscriptions s on p.plan_id = s.plan_id
+where format(start_date,'yyyy') >= 2020
 group by plan_name
 
------- Câu 4B: Số lượng khách hàng và tỷ lệ khách hàng đã chuyển đi làm tròn đến 1 chữ số thập phân là bao nhiêu?
+------ Câu 4B: Số lượng khách hàng và tỷ lệ khách hàng rời bỏ làm tròn đến 1 chữ số thập phân là bao nhiêu?
 select
   count(distinct case when p.plan_name = 'churn' then s.customer_id end) as total_churn,
   concat(
@@ -2716,15 +2717,117 @@ select
 from subscriptions s
 join plans p on s.plan_id = p.plan_id;
 
------- Câu 5B: Có bao nhiêu khách hàng đã rời bỏ ngay sau lần dùng thử miễn phí đầu tiên - con số này được làm tròn đến số nguyên gần nhất là bao nhiêu phần trăm?
+------ Câu 5B: Có bao nhiêu khách hàng đã rời bỏ ngay sau lần dùng thử miễn phí đầu tiên, tỉ lệ con số này được làm tròn đến số nguyên gần nhất là bao nhiêu phần trăm?
+with ranked_plans as (
+    select
+        s.customer_id,
+        p.plan_name,
+        s.start_date,
+        row_number() over (
+			partition by s.customer_id 
+			order by s.start_date) as plan_order
+    from subscriptions s
+    join plans p on s.plan_id = p.plan_id
+),
+first_and_second as (
+    select
+        customer_id,
+        max(case when plan_order = 1 then plan_name end) as first_plan,
+        max(case when plan_order = 2 then plan_name end) as second_plan
+    from ranked_plans
+    where plan_order <= 2
+    group by customer_id
+)
+select
+    count(customer_id) as customers_churn_after_trial,
+    round(
+        100*count(customer_id) /
+        (select 
+			count(customer_id) 
+			from first_and_second 
+			where first_plan = 'trial') ,
+        0
+    ) as percent_churned_after_trial
+from first_and_second
+where first_plan = 'trial' and second_plan = 'churn'
 
 ------ Câu 6B: Số lượng và tỷ lệ phần trăm khách hàng đăng ký sau khi dùng thử miễn phí lần đầu là bao nhiêu?
+with ranked_plans as (
+    select
+        s.customer_id,
+        p.plan_name,
+        s.start_date,
+        row_number() over (
+			partition by s.customer_id 
+			order by s.start_date) as rank
+    from subscriptions s
+    join plans p on s.plan_id = p.plan_id
+),
+first_and_second as (
+    select
+        customer_id,
+        max(case when rank = 1 then plan_name end) as first_plan,
+        max(case when rank = 2 then plan_name end) as second_plan
+    from ranked_plans
+    where rank <= 2
+    group by customer_id
+)
+select
+    count(customer_id) as customers_churn_after_trial,
+    round(
+        100*count(customer_id) /
+        (select 
+			count(customer_id) 
+			from first_and_second 
+			where first_plan = 'trial') ,
+        0
+    ) as percent_churned_after_trial
+from first_and_second
+where first_plan = 'trial' and second_plan != 'churn'
 
 ------ Câu 7B: Số lượng khách hàng và tỷ lệ phân bổ của tất cả 5 plan_namegiá trị là bao nhiêu 2020-12-31?
+select plan_name, count(customer_id) as total_customer
+from plans p
+join subscriptions s on p.plan_id = s.plan_id
+where start_date < '2020-12-31'
+group by plan_name
 
------- Câu 8B: Có bao nhiêu khách hàng đã nâng cấp lên gói hàng năm vào năm 2020?
+------ Câu 8B: Có bao nhiêu khách hàng đã nâng cấp lên gói hàng năm vào năm 2020 sau khi sử dụng gói khác?
+with sub_num as (
+	select customer_id, plan_id, start_date,
+	dense_rank()over(
+		partition by customer_id
+		order by start_date) as rank
+	from subscriptions
+)
+select count(distinct customer_id) as total_customer
+from sub_num
+where rank > 1 and 
+plan_id = 3 and 
+format(start_date,'yyyy') = 2020
 
 ------ Câu 9B: Trung bình mất bao nhiêu ngày để một khách hàng chuyển sang gói dịch vụ hàng năm kể từ ngày họ tham gia Foodie-Fi?
+with ranked_plans as (
+    select 
+        s.customer_id,
+        p.plan_name,
+        s.start_date,
+        row_number() over (partition by s.customer_id order by s.start_date) as rn
+    from subscriptions s
+    join plans p on s.plan_id = p.plan_id
+),
+first_and_annual as (
+    select
+        customer_id,
+        min(case when plan_name = 'trial' then start_date end) as trial_date,
+        min(case when plan_name = 'pro annual' then start_date end) as annual_date
+    from ranked_plans
+    group by customer_id
+)
+select 
+    avg(datediff(day, trial_date, annual_date)) as avg_days_to_annual
+from first_and_annual
+where annual_date is not null
 
 ------ Câu 10B: Bạn có thể chia nhỏ giá trị trung bình này thành các khoảng thời gian 30 ngày (tức là 0-30 ngày, 31-60 ngày, v.v.) không?
 
