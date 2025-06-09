@@ -5,7 +5,7 @@ CREATE TABLE plans (
   plan_id INTEGER,
   plan_name VARCHAR(13),
   price DECIMAL(5,2)
-);
+)
 
 INSERT INTO plans
   (plan_id, plan_name, price)
@@ -14,7 +14,7 @@ VALUES
   ('1', 'basic monthly', '9.90'),
   ('2', 'pro monthly', '19.90'),
   ('3', 'pro annual', '199'),
-  ('4', 'churn', null);
+  ('4', 'churank', null)
 
 
 
@@ -22,7 +22,7 @@ CREATE TABLE subscriptions (
   customer_id INTEGER,
   plan_id INTEGER,
   start_date DATE
-);
+)
 
 INSERT INTO subscriptions
   (customer_id, plan_id, start_date)
@@ -2676,12 +2676,12 @@ VALUES
   ('999', '4', '2020-12-01'),
   ('1000', '0', '2020-03-19'),
   ('1000', '2', '2020-03-26'),
-  ('1000', '4', '2020-06-04');
+  ('1000', '4', '2020-06-04')
 
 select * from plans
 select * from subscriptions
 
----------- A. Customer Journey
+---------- A. Customer Jourankey
 
 ---------- B. Data Analysis Questions
 ------ Câu 1B: Foodie-Fi đã từng có bao nhiêu khách hàng?
@@ -2704,18 +2704,18 @@ group by plan_name
 
 ------ Câu 4B: Số lượng khách hàng và tỷ lệ khách hàng rời bỏ làm tròn đến 1 chữ số thập phân là bao nhiêu?
 select
-  count(distinct case when p.plan_name = 'churn' then s.customer_id end) as total_churn,
+  count(distinct case when p.plan_name = 'churank' then s.customer_id end) as total_churank,
   concat(
   cast(
     round(
-      count(distinct case when p.plan_name = 'churn' then s.customer_id end)
+      count(distinct case when p.plan_name = 'churank' then s.customer_id end)
       / count(distinct s.customer_id) * 100,
       1
     ) as decimal(5,1)
   ),'%'
-) as percent_churned
+) as percent_churanked
 from subscriptions s
-join plans p on s.plan_id = p.plan_id;
+join plans p on s.plan_id = p.plan_id
 
 ------ Câu 5B: Có bao nhiêu khách hàng đã rời bỏ ngay sau lần dùng thử miễn phí đầu tiên, tỉ lệ con số này được làm tròn đến số nguyên gần nhất là bao nhiêu phần trăm?
 with ranked_plans as (
@@ -2739,7 +2739,7 @@ first_and_second as (
     group by customer_id
 )
 select
-    count(customer_id) as customers_churn_after_trial,
+    count(customer_id) as customers_churank_after_trial,
     round(
         100*count(customer_id) /
         (select 
@@ -2747,9 +2747,9 @@ select
 			from first_and_second 
 			where first_plan = 'trial') ,
         0
-    ) as percent_churned_after_trial
+    ) as percent_churanked_after_trial
 from first_and_second
-where first_plan = 'trial' and second_plan = 'churn'
+where first_plan = 'trial' and second_plan = 'churank'
 
 ------ Câu 6B: Số lượng và tỷ lệ phần trăm khách hàng đăng ký sau khi dùng thử miễn phí lần đầu là bao nhiêu?
 with ranked_plans as (
@@ -2773,7 +2773,7 @@ first_and_second as (
     group by customer_id
 )
 select
-    count(customer_id) as customers_churn_after_trial,
+    count(customer_id) as customers_churank_after_trial,
     round(
         100*count(customer_id) /
         (select 
@@ -2781,11 +2781,11 @@ select
 			from first_and_second 
 			where first_plan = 'trial') ,
         0
-    ) as percent_churned_after_trial
+    ) as percent_churanked_after_trial
 from first_and_second
-where first_plan = 'trial' and second_plan != 'churn'
+where first_plan = 'trial' and second_plan != 'churank'
 
------- Câu 7B: Số lượng khách hàng và tỷ lệ phân bổ của tất cả 5 plan_namegiá trị là bao nhiêu 2020-12-31?
+------ Câu 7B: Số lượng khách hàng và tỷ lệ phân bổ của tất cả 5 plan_name giá trị là bao nhiêu tính từ 2020-12-31?
 select plan_name, count(customer_id) as total_customer
 from plans p
 join subscriptions s on p.plan_id = s.plan_id
@@ -2793,18 +2793,30 @@ where start_date < '2020-12-31'
 group by plan_name
 
 ------ Câu 8B: Có bao nhiêu khách hàng đã nâng cấp lên gói hàng năm vào năm 2020 sau khi sử dụng gói khác?
-with sub_num as (
-	select customer_id, plan_id, start_date,
-	dense_rank()over(
-		partition by customer_id
-		order by start_date) as rank
-	from subscriptions
+with ranked_subs as (
+    select 
+        s.customer_id,
+        p.plan_name,
+        s.start_date,
+        row_number() over (partition by s.customer_id order by s.start_date) as rank
+    from subscriptions s
+    join plans p on s.plan_id = p.plan_id
+),
+transitions as (
+    select 
+        new.customer_id,
+        old.plan_name as old_plan,
+        new.plan_name as new_plan,
+        new.start_date as new_date
+    from ranked_subs new
+    join ranked_subs old 
+        on new.customer_id = old.customer_id 
+        and new.rank = old.rank + 1
 )
 select count(distinct customer_id) as total_customer
-from sub_num
-where rank > 1 and 
-plan_id = 3 and 
-format(start_date,'yyyy') = 2020
+from transitions
+where new_plan = 'pro annual'
+  and format(new_date, 'yyyy') = '2020'
 
 ------ Câu 9B: Trung bình mất bao nhiêu ngày để một khách hàng chuyển sang gói dịch vụ hàng năm kể từ ngày họ tham gia Foodie-Fi?
 with ranked_plans as (
@@ -2812,7 +2824,7 @@ with ranked_plans as (
         s.customer_id,
         p.plan_name,
         s.start_date,
-        row_number() over (partition by s.customer_id order by s.start_date) as rn
+        row_number() over (partition by s.customer_id order by s.start_date) as rank
     from subscriptions s
     join plans p on s.plan_id = p.plan_id
 ),
@@ -2832,3 +2844,28 @@ where annual_date is not null
 ------ Câu 10B: Bạn có thể chia nhỏ giá trị trung bình này thành các khoảng thời gian 30 ngày (tức là 0-30 ngày, 31-60 ngày, v.v.) không?
 
 ------ Câu 11B: Có bao nhiêu khách hàng đã hạ cấp từ gói chuyên nghiệp hàng tháng xuống gói cơ bản hàng tháng vào năm 2020?
+with ranked_subs as (
+    select 
+        s.customer_id,
+        p.plan_name,
+        s.start_date,
+        row_number() over (partition by s.customer_id order by s.start_date) as rank
+    from subscriptions s
+    join plans p on s.plan_id = p.plan_id
+),
+transitions as (
+    select 
+        new.customer_id,
+        old.plan_name as old_plan,
+        new.plan_name as new_plan,
+        new.start_date as new_date
+    from ranked_subs new
+    join ranked_subs old 
+        on new.customer_id = old.customer_id 
+        and new.rank = old.rank + 1
+)
+select count(distinct customer_id) as total_customer
+from transitions
+where old_plan = 'pro monthly'
+  and new_plan = 'basic monthly'
+  and format(new_date, 'yyyy') = '2020'
